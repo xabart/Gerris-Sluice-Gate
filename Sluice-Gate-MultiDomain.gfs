@@ -1,0 +1,296 @@
+#
+#  2D Spillway from WRL
+#########################################################################################################
+##########################################################################################################
+# Remember : Gerris solves Fluid Mechanics Incompressible Navier-Stokes
+##########################################################################################################
+# \div.u = 0
+#
+#      d u
+# \rho ----- =  - \grad p + \div(\mu(\grad u + \grad u^T)) + \sigma \kappa ( \delta_s n)   + \rho f
+#      d t
+#
+# equations are written in the following form
+#
+#\div U = 0
+#
+#  d U
+# ----- = alpha ( -\grad P + (SourceViscosity (\grad U+\grad U^T)) + GfsSourceTension GfsVariableCurvature ( \delta_s n)) + Source(U)
+#  d t
+#
+# parameters are indeed :
+# 1/\rho        alpha                   elementary volume          http://gfs.sourceforge.net/wiki/index.php/GfsPhysicalParams
+# \mu           SourceViscosity dynamic viscosity                  http://gfs.sourceforge.net/wiki/index.php/GfsSourceViscosity
+# \sigma        GfsSourceTension        surface tension            http://gfs.sourceforge.net/wiki/index.php/GfsSourceTension
+# \kappa        GfsVariableCurvature    courbure                   http://gfs.sourceforge.net/wiki/index.php/GfsVariableCurvature
+# f             Source                  supplementary acceleration http://gfs.sourceforge.net/wiki/index.php/GfsSource
+#
+#
+# Of course, Gerris is dimensionless. Dimensionless variables:
+# u = U_0 u, v = U_0 v,  x = L x,  y = L y,  t = L/U_0 t,     p = \rho U_0^2 p
+# \rho = \rho_0 \bar{\rho}, \mu = \mu_0 \bar{\mu},  \sigma = \sigma_0 \bar{\sigma}
+#
+# which gives, taking care of the fact that \div n = \kappa , la courbure \kappa = \bar{\kappa} /L,
+# and \delta_s = \bar{delta_s} L
+#
+#  \div \bar{U} = 0
+#
+#             d u                         1                                           1
+#  \bar{rho} ----- =  - \grad \bar{p} + (---) \div(\bar{\mu}(\grad u + \grad u^T)) + --- \bar{\kappa} ( \bar{\delta_s} n)
+#             d t                         Re                                          We
+#
+# with the following non dimension numbers Re = \rho_0 U_0 L/\mu_0  et  We = \rho_0 U_0^2 L/\sigma_0
+#
+#
+#########################################################################################################
+##########################################################################################################
+
+#########################################################################################################
+##########################################################################################################
+# in our case
+##################################################
+#
+#  Qw =                          input flow
+#  Width
+#  Dc = 1                        critical depth 
+#  g = 2 pi                      gravity
+#  Time = 1                         period
+#  omega = 2*pi/T = 2*pi
+#  U0 = (g/omega)=1
+#  pho_w = 1000                  water density
+#  pho_a = 1.225                 air density
+#  mu_w = 1.002 e-3              water viscosity
+#  mu_a = 1.79 e-5               air viscosity
+#  sigma_0 = 7.286 e-2           specific surface tension water/air (N/m)
+#  Re = 1000*1*1/mu_w= 998004    Reynolds number (water)
+#  We = 1000/7.286 e-2 =  13725  Weber number(water)
+#
+##################################################
+##################################################
+#  domains
+#
+
+#      --------------------
+#       1 | 2 | 3 | 4 | 5 |
+#
+##################################################
+##################################################
+
+5 4 GfsSimulation GfsBox GfsGEdge {
+##############################################################
+  # shift origin of the domain
+   x = 0.5 y = 0.5 } {
+###############################################################
+  Global {
+    double Qw = 0.05452 ;
+    double Width = 1 ;
+    double g = 9.81;
+    double Time = 1;
+    double pho_w = 1000;
+    double pho_a = 1.225 ;
+    double mu_w = 1.002E-3 ;
+    double mu_a = 1.79E-5  ;
+    double sigma_0 = 7.286E-2 ;
+    double Hspillway = 0.036 ;
+    double Xinlet=0.3;
+      
+    #define Qw2        (Qw*Qw)
+    #define Width2     (Width*Width)
+    #define Dc         (cbrt((Qw2/(g*Width2))))
+    #define U0         (sqrt(g*Dc))
+    #define Re_w       (pho_w*U0*Dc/mu_w)
+    #define We_w       (pho_w*U0*U0/sigma_0)
+    #define ratio_rho  (pho_a /pho_w)
+    #define ratio_mu   (mu_a/mu_w)
+    #define ThetaSpillway   (ThetaSpillwayDegree*M_PI/180.)
+    #define LengthSpillway  (Hspillway/tan(ThetaSpillway))
+    
+    #define Greduced   (g/pho_w)
+    #define RefineInit  (6)
+
+//###############################################################
+//##   2 fluid phases
+//###############################################################
+    // The CLAMP function has the mission to keep values of the tracer within 0 and 1.
+    // You can use dtmax = 1e-2 to decrease time steps.
+    #define VAR(T,min,max) (min + CLAMP(T,0,1)*(max - min))
+    #define RHO(T)               VAR(T,ratio_rho,1.)
+    #define MU(T)                VAR(T,ratio_mu,1.)
+
+
+//###############################################################
+    // inflow
+//###############################################################
+          
+     double InflowInletU(double y, double Hspillway, double Qw){
+        if (y<Hspillway){
+          return (Qw/Hspillway);
+        }
+        else{
+          return 0.;
+        }
+     }
+     double InflowInletT(double y, double Hspillway){
+        if (y<Hspillway){
+          return 0.;
+        }
+        else{
+          return 1.;
+        }
+     }
+//###############################################################
+    // Spillway init
+//###############################################################
+     double SpillwayInitT(double x, double y,double Hinit,double Xinlet){
+        if ((x<=Xinlet)&(y<=Hinit)){
+          return 0.;
+        }
+        else{
+          return 1.;
+        }
+     }
+     
+//###############################################################
+  }
+###############################################################
+# http://gfs.sourceforge.net/wiki/index.php/Hypre
+#  GModule hypre {
+#  solver_type      = boomer_amg
+#  precond_type     = none
+#  relax_type       = gs-j
+#  coarsening_type  = cgc_e
+#  cycle_type       = 1
+#  nlevel           = 0
+#  verbose          = 0
+# }
+##########################################
+  # Grid Resolution
+  Refine RefineInit
+
+  # Time
+  #Time { end = 0.05 }
+  Time { end = 203.05 }
+
+  # Tolerance for poisson
+ # ProjectionParams { tolerance = 1.e-6 nitermax = 20000}
+ # ApproxProjectionParams { tolerance = 1.e-6 nitermax = 20000}
+
+
+  # parameters of various advection schemes
+  #GfsAdvectionParams {
+  #cfl = 0.4
+ # }
+  # Variable for the interface (VOF)
+  VariableTracerVOFHeight T
+
+  # In case of high density ratio
+  VariableFiltered T1 T 1
+
+  # Curvature of the interface
+  VariableCurvature K T
+
+  # Coefficient for surface tension = 1/We^2
+   SourceTension T (1./(We_w*We_w)) K
+
+  # Init of the velocity field
+   Init { } {
+	U=0.
+	V=0.
+    }
+
+  # Init of free surface
+   InitFraction {}  T ( (y-0.04) )
+#  InitFraction {}  T ( 1.)
+#  InitFraction {}  T ( (SpillwayInitT(x, y,Hspillway-RadiusInletSpillway,Xinlet)))
+#  InitFraction {}  T ( cube(Xinlet/2,(Hspillway-RadiusInletSpillway)/2,0,(Hspillway-RadiusInletSpillway) ))
+#  InitFraction {}  T ( cube(Xinlet/2,(Hspillway)/2,0,(Hspillway) ))
+
+
+  # Density
+  #air/water density ratio si T1=0 ratio_rho si T1=1 1
+  PhysicalParams { alpha = 1./RHO(T1) g=g}
+
+
+  # Viscosity
+  SourceViscosity (1./Re_w)*MU(T1)
+
+  # Gravity
+  Source {} V (-g)
+  Source {} U (0.)
+# Use the reduced gravity approach
+  # g = -g, g'=-g*(rho1-rho2) 
+#  VariablePosition Y T y
+#  SourceTension T (-Greduced*(1.-ratio_rho )) Y
+
+  # AMR
+  # AdaptVorticity { istep = 3 } { maxlevel = 10 cmax = 1e-2 }
+  # AdaptGradient  { istep = 3 } { maxlevel = 10 cmax = 1e-2 } T
+  # AdaptGradient { istep = 3 } { cmax = 0.0 maxlevel = LEVEL1 } (U*T)
+  
+  RemoveDroplets { istep = 1 } T -2
+
+  # Balance the number of elements across parallel subdomains at every
+  # timestep if the imbalance is larger than 0.1 (i.e. 10% difference
+  # between the largest and smallest subdomains).
+    EventBalance { istep = 1 } 0.1
+
+  # Writes the time and timestep every 10 timesteps on standard error
+#  OutputTime { istep = 10 } stderr
+
+  # Writes the time and simulation balance every timestep in 'balance'
+#  OutputTime { istep = 1 } balance
+#  OutputBalance { istep = 1 } balance
+   
+  GfsOutputSimulation { step = 1 } Test-%ld.gfs
+
+#   GfsOutputSimulation { step = 1 } stdout
+  GfsOutputTime 	   { istep = 1 } stdout
+  GfsOutputProjectionStats { istep = 1 } stdout
+  GfsOutputPPM  	   { step = 0.2 } test.ppm {
+    v = T1 
+    min = 0
+    max =  1.
+  }
+}
+GfsBox{
+  left = Boundary {
+  BcDirichlet U (InflowInletU(y, 0.036,Qw))
+  BcDirichlet V 0
+  BcDirichlet T (InflowInletT(y, 0.036))
+  }
+  bottom = Boundary {
+  BcDirichlet U 0.
+  BcDirichlet V 0.
+  }
+}
+GfsBox{
+  bottom = Boundary {
+  BcDirichlet U 0.
+  BcDirichlet V 0.
+  }
+}
+GfsBox{
+  bottom = Boundary {
+  BcDirichlet U 0.
+  BcDirichlet V 0.
+  }
+}
+GfsBox{
+  bottom = Boundary {
+  BcDirichlet U 0.
+  BcDirichlet V 0.
+  }
+}
+GfsBox{
+  right = BoundaryOutflow
+  bottom = Boundary {
+  BcDirichlet U 0.
+  BcDirichlet V 0.
+  }
+}
+1 2 right
+2 3 right
+3 4 right
+4 5 right
+
+
